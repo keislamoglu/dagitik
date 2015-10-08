@@ -2,8 +2,8 @@ import numpy as np
 from matplotlib import pyplot as plt
 
 # Mu ve Sigma değerleri atamaları
-mu_1, sigma_1 = -3.3, 0.8
-mu_2, sigma_2 = 4.7, 1.2
+mu_1, sigma_1 = -3.3, 1.2
+mu_2, sigma_2 = 4.7, 0.8
 
 # Ortalama ve standart sapma değerleri kullanılarak rastgele oluşturulan 10000 adetlik diziler
 s_1 = np.random.normal(mu_1, sigma_1, 10000)
@@ -19,7 +19,7 @@ total_1, total_2 = 0, 0
 # Birinci histogram değerleri set ediliyor
 for val in s_1:
     int_val = int(val)
-    if int_val >= -20 & int_val <= 20:
+    if (int_val >= -20) and (int_val <= 20):
         histogram_1[indexes_1.index(int_val)] += 1
         total_1 += 1
 # Birinci histogram için normalizasyon işlemi
@@ -29,7 +29,7 @@ for index, val in enumerate(histogram_1):
 # İkinci histogram değerleri set ediliyor
 for val in s_2:
     int_val = int(val)
-    if int_val >= -20 & int_val <= 20:
+    if (int_val >= -20) and (int_val <= 20):
         histogram_2[indexes_2.index(int_val)] += 1
         total_2 += 1
 
@@ -48,9 +48,9 @@ plt.xlim(-20, 20)
 
 # distance hesaplanıyor
 i, j, distance = 0, 0, 0
-while (j < len(histogram_2) - 1) & (i < len(histogram_1) - 1):
+while (j < len(histogram_2) - 1) and (i < len(histogram_1) - 1):
     if histogram_2[j] > 0:
-        while (i < len(histogram_1) - 1) & (histogram_1[i] == 0):
+        while (i < len(histogram_1) - 1) and (histogram_1[i] == 0):
             i += 1
         distance += abs(i-j) * histogram_1[i]
         if histogram_2[j] > histogram_1[i]:
