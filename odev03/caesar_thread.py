@@ -57,30 +57,35 @@ class CaesarChipperThread(threading.Thread):
 
 sample_text = 'lorem ipsum dolor sit amet'
 
+text_file = open('metin.txt', 'r')
+
 
 def caesar_chipper(s, n, l):
     encrypted_text = ''
     length = n * l
-    start_index = 0
-    while len(encrypted_text) < len(sample_text):
-        threads = []
-        thread_start_index = start_index
-        for i in range(1, n + 1):
-            # bir thread için belirlenmiş olan string parçası
-            thread_string_part = sample_text[thread_start_index:thread_start_index + l]
-            # thread, threads listesine ekleniyor
-            threads.append(
-                CaesarChipperThread(i, 'Thread-' + str(i), s, thread_string_part))
-            thread_start_index += l
-            # son eklenen thread koşturuluyor
-            threads[-1].start()
-        # threadler bekleniyor
-        for t in threads:
-            t.join()
-            # threadlerin şifrelediği kısımlar sırasıyla ekleniyor
-            encrypted_text += t.get_encrypted_string()
-        start_index += length
+    for line in text_file:
+        encrypted_line = ''
+        start_index = 0
+        while len(encrypted_line) < len(line):
+            threads = []
+            thread_start_index = start_index
+            for i in range(1, n + 1):
+                # bir thread için belirlenmiş olan string parçası
+                thread_string_part = line[thread_start_index:thread_start_index + l]
+                # thread, threads listesine ekleniyor
+                threads.append(
+                    CaesarChipperThread(i, 'Thread-' + str(i), s, thread_string_part))
+                thread_start_index += l
+                # son eklenen thread koşturuluyor
+                threads[-1].start()
+            # threadler bekleniyor
+            for t in threads:
+                t.join()
+                # threadlerin şifrelediği kısımlar sırasıyla ekleniyor
+                encrypted_line += t.get_encrypted_string()
+            start_index += length
+        encrypted_text += encrypted_line
     print(encrypted_text)
 
 
-caesar_chipper(0, 2, 3)
+caesar_chipper(7, 1, 3)
