@@ -1,91 +1,108 @@
 import threading
+from queue import Queue
 
-
-# thread class
-class CaesarChipperThread(threading.Thread):
-    # normal düzendeki alfabe, öteleme için kullanılacak
-    __alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
-    # ötelenmiş alfabe
-    __shifted_alphabet = ''
-    # şifrelenecek string
-    __string = ''
-    # şifrelenmiş string
-    __encrypted_string = ''
-
-    # construct
-    def __init__(self, thread_id, thread_name, key, string):
-        threading.Thread.__init__(self)
-        # thread id
-        self.thread_id = thread_id
-        # thread ismi
-        self.name = thread_name
-        # şifrelenecek string
-        self.__string = string
-        # anahtar
-        self.__key = key
-        # alfabe sağa kaydırılıyor
-        self.__shift_right_alphabet()
-
-    # override threading run method
-    def run(self):
-        self.__encrypted_string = self.__encrypt_string(self.__string)
-
-    def get_encrypted_string(self):
-        return self.__encrypted_string
-
-    # şifreleme yapan method
-    def __encrypt_string(self, text):
-        text = text.upper()
-        encrypted_text = ''
-        for index, char in enumerate(text):
-            encrypted_text += self.__get_shifted_char(char)
-        return encrypted_text
-
-    # öteleme yapan method
-    def __shift_right_alphabet(self):
-        self.__shifted_alphabet = ''
-        length = len(self.__alphabet)
-        for i in range(0, length):
-            self.__shifted_alphabet += self.__alphabet[(i - self.__key) % length]
-
-    # parametre olarak verilen karakterin ötelenmiş alfabe dizisindeki karşılığını döndürür
-    def __get_shifted_char(self, char):
-        if self.__alphabet.find(char) == -1:
-            return char
-        return self.__shifted_alphabet[self.__alphabet.index(char)]
-
-
-sample_text = 'lorem ipsum dolor sit amet'
-
+exit_flag = False
+alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
+shifted_alphabet = ''
+thread_lock = threading.Lock()
 text_file = open('metin.txt', 'r')
 
 
 def caesar_chipper(s, n, l):
-    encrypted_text = ''
-    length = n * l
-    for line in text_file:
-        encrypted_line = ''
-        start_index = 0
-        while len(encrypted_line) < len(line):
-            threads = []
-            thread_start_index = start_index
-            for i in range(1, n + 1):
-                # bir thread için belirlenmiş olan string parçası
-                thread_string_part = line[thread_start_index:thread_start_index + l]
-                # thread, threads listesine ekleniyor
-                threads.append(
-                    CaesarChipperThread(i, 'Thread-' + str(i), s, thread_string_part))
-                thread_start_index += l
-                # son eklenen thread koşturuluyor
-                threads[-1].start()
-            # threadler bekleniyor
-            for t in threads:
-                t.join()
-                # threadlerin şifrelediği kısımlar sırasıyla ekleniyor
-                encrypted_line += t.get_encrypted_string()
-            start_index += length
-        encrypted_text += encrypted_line
-    print(encrypted_text)
+    global text_file
+    global exit_flag
+    shift_right_alphabet(s)
+    encrypted_file = open('crypted_%d_%d_%d.txt' % (s, n, l), 'w+')
+    w_queue = Queue()
+    threads = []
+    for i in range(1, n + 1):
+        threads.append(CaesarChipperThread(i, 'Thread-' + str(i), w_queue, encrypted_file))
+        threads[-1].start()
+    while True:
+        string = text_file.read(l)
+        if string == '':
+            break
+        w_queue.put(string)
+    while not w_queue.empty():
+        pass
+    exit_flag = True
+    for t in threads:
+        t.join()
 
 
-caesar_chipper(7, 1, 3)
+# Thread class
+class CaesarChipperThread(threading.Thread):
+    def __init__(self, thread_id, thread_name, work_queue, encrypted_file):
+        threading.Thread.__init__(self)
+        # Thread ID
+        self.thread_id = thread_id
+        # Thread ismi
+        self.name = thread_name
+        # Şifreli içeriğe sahip dosya
+        self.__encrypted_file = encrypted_file
+        # İş Kuyruğu
+        self.__work_queue = work_queue
+        # Thread Loc
+        self.__thread_lock = thread_lock
+
+    def run(self):
+        print('Starting %s' % self.name)
+        process(self.__work_queue, self.__encrypted_file)
+        print('Exiting %s' % self.name)
+
+
+def process(w_queue, encrypted_file):
+    while not exit_flag:
+        thread_lock.acquire()
+        if not w_queue.empty():
+            data = w_queue.get()
+            if data == '':
+                break
+            encrypted_file.write(encrypt_string(data))
+        thread_lock.release()
+
+
+# Şifreleme yapar
+
+def encrypt_string(string):
+    string = string.upper()
+    encrypted_string = ''
+    for index, char in enumerate(string):
+        encrypted_string += get_shifted_char(char)
+    return encrypted_string
+
+
+# Alfabeyi tanımlanan anahtar değeri kadar kaydırır
+
+def shift_right_alphabet(key):
+    global alphabet
+    global shifted_alphabet
+    new_alphabet = ''
+    length = len(alphabet)
+    for i in range(0, length):
+        new_alphabet += alphabet[(i - key) % length]
+    shifted_alphabet = new_alphabet
+
+
+# Parametre olarak verilen karakterin kaydırma yapılmış alfabe dizisindeki karşılığını döndürür
+
+def get_shifted_char(char):
+    global shifted_alphabet
+    global alphabet
+    # Alfabede yer almıyorsa kendisini döndürür
+
+    if alphabet.find(char) == -1:
+        return char
+
+    # Alfabade var ise kaydırılmış alfabedeki karşılığını döndürür
+
+    else:
+        return shifted_alphabet[alphabet.index(char)]
+
+
+def main():
+    caesar_chipper(3, 4, 5)
+
+
+if __name__ == '__main__':
+    main()
