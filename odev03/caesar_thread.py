@@ -16,12 +16,12 @@ def main():
 # Caesar Chipper func.
 
 def caesar_chipper(s, n, l):
-    global text_file, exit_flag, w_queue
+    global text_file, exit_flag, w_queue, encrypted_file
     shift_right_alphabet(s)
     encrypted_file = open('crypted_%d_%d_%d.txt' % (s, n, l), 'w+')
     threads = []
     for i in range(1, n + 1):
-        threads.append(CaesarChipperThread(i, 'Thread-' + str(i), encrypted_file))
+        threads.append(CaesarChipperThread(i, 'Thread-' + str(i)))
         threads[-1].start()
     while True:
         string = text_file.read(l)
@@ -38,26 +38,23 @@ def caesar_chipper(s, n, l):
 # Thread class
 
 class CaesarChipperThread(threading.Thread):
-    def __init__(self, thread_id, thread_name, encrypted_file):
+    def __init__(self, thread_id, thread_name):
         threading.Thread.__init__(self)
         # Thread ID
         self.thread_id = thread_id
         # Thread ismi
         self.name = thread_name
-        # Şifreli içeriğe sahip dosya
-        self.__encrypted_file = encrypted_file
-        # Thread Loc
-        self.__thread_lock = thread_lock
 
     def run(self):
         print('Starting %s' % self.name)
-        process(self.__encrypted_file)
+        process()
         print('Exiting %s' % self.name)
+
 
 # Her bir thread'in yapacağı iş
 
-def process(encrypted_file):
-    global w_queue
+def process():
+    global w_queue, encrypted_file
     while not exit_flag:
         thread_lock.acquire()
         if not w_queue.empty():
