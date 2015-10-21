@@ -5,7 +5,7 @@ exit_flag = False
 alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
 shifted_alphabet = ''
 thread_lock = threading.Lock()
-text_file = open('metin.txt', 'r')
+text_filename = 'metin.txt'
 w_queue = Queue()
 
 
@@ -16,8 +16,9 @@ def main():
 # Caesar Chipper func.
 
 def caesar_chipper(s, n, l):
-    global text_file, exit_flag, w_queue, encrypted_file
+    global exit_flag, w_queue, encrypted_file, text_filename
     shift_right_alphabet(s)
+    text_file = open(text_filename, 'r')
     encrypted_file = open('crypted_%d_%d_%d.txt' % (s, n, l), 'w+')
     threads = []
     for i in range(1, n + 1):
