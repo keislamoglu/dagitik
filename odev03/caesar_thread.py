@@ -33,6 +33,8 @@ def caesar_chipper(s, n, l):
     exit_flag = True
     for t in threads:
         t.join()
+    text_file.close()
+    encrypted_file.close()
 
 
 # Thread class
