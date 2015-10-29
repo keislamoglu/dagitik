@@ -2,10 +2,10 @@ import socket
 import threading
 
 s = socket.socket()
-host = "127.0.0.1"
+host = socket.gethostname()
 port = 12345
-message = ""
 exitFlag = False
+threadLock = threading.Lock()  # server'dan gelen mesajların ekrana bastırıldıktan sonra input alınması için
 
 
 def main():
@@ -46,17 +46,16 @@ class WriteThread(threading.Thread):
 def read_from_server():
     global exitFlag
     while not exitFlag:
-        received_msg = s.recv(1024).decode()
-        if received_msg != "":
-            print(received_msg)
+        received_message = s.recv(1024).decode()
+        print(received_message)
 
 
 def write_to_server():
-    global message, exitFlag
+    global exitFlag
     while not exitFlag:
-        message = input('Enter a message to send server:')
+        message = input()
         s.send(bytes(message, 'UTF-8'))
-        if message == "end":
+        if message == 'end':
             exitFlag = True
 
 
