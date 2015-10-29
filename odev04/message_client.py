@@ -5,7 +5,6 @@ s = socket.socket()
 host = socket.gethostname()
 port = 12345
 exitFlag = False
-threadLock = threading.Lock()  # server'dan gelen mesajların ekrana bastırıldıktan sonra input alınması için
 
 
 def main():
