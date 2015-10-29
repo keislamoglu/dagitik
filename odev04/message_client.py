@@ -1,6 +1,25 @@
 import socket
 import threading
 
+s = socket.socket()
+host = "127.0.0.1"
+port = 12345
+message = ""
+exitFlag = False
+
+
+def main():
+    s.connect((host, port))
+    r_thread = ReadThread(1)
+    r_thread.start()
+    w_thread = WriteThread(2)
+    w_thread.start()
+    while not exitFlag:
+        pass
+    r_thread.join()
+    w_thread.join()
+    s.close()
+
 
 class ReadThread(threading.Thread):
     def __init__(self, thread_id):
@@ -24,36 +43,22 @@ class WriteThread(threading.Thread):
         print("Ending Thread-" + str(self.thread_id))
 
 
-s = socket.socket()
-host = "127.0.0.1"
-port = 12345
-s.connect((host, port))
-rThread = ReadThread(1)
-rThread.start()
-wThread = WriteThread(2)
-wThread.start()
-message = ""
-exitFlag = False
-
-while not exitFlag:
-    pass
-
-rThread.join()
-wThread.join()
-s.close()
-
-
 def read_from_server():
+    global exitFlag
     while not exitFlag:
-        received_msg = s.recv()
+        received_msg = s.recv(1024).decode()
         if received_msg != "":
-            print(received_msg + ", server sent")
+            print(received_msg)
 
 
 def write_to_server():
     global message, exitFlag
     while not exitFlag:
         message = input('Enter a message to send server:')
-        s.send(message)
+        s.send(bytes(message, 'UTF-8'))
         if message == "end":
             exitFlag = True
+
+
+if __name__ == '__main__':
+    main()

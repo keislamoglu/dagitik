@@ -3,6 +3,14 @@ import threading
 import random
 import datetime
 
+threadCounter = 0
+randomNumber = 0
+s = socket.socket()
+host = "0.0.0.0"
+port = 12345
+s.bind((host, port))
+s.listen(5)
+
 
 class ServerThread(threading.Thread):
     def __init__(self, thread_id, client_socket, client_addr):
@@ -15,15 +23,6 @@ class ServerThread(threading.Thread):
         print("Starting Thread-" + str(self.thread_id))
         connect_to_client(self.client_socket)
         print("Ending Thread-" + str(self.thread_id))
-
-
-threadCounter = 0
-randomNumber = 0
-s = socket.socket()
-host = "0.0.0.0"
-port = 12345
-s.bind((host, port))
-s.listen(5)
 
 
 def main():
@@ -44,10 +43,10 @@ def connect_to_client(client_socket):
         if randomNumber == 0:
             time = "Merhaba, saat şu an %s" % datetime.datetime.now().strftime("%H:%M")
             client_socket.send(bytes(time, 'UTF-8'))
-            randomNumber = random.randint(1000, 5000)
+            randomNumber = random.randint(0, 9)
         randomNumber -= 1
         # İstemcinin mesajı alınıyor, eğer "end" ise soket kapatılıyor
-        message = client_socket.recv(1024)
+        message = client_socket.recv(1024).decode()
         if message == "end":
             client_socket.close()
             break
