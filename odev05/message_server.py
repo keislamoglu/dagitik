@@ -64,7 +64,8 @@ class ReadThread(threading.Thread):
             response = "LSA " + "".join('%s:' % k for k in fihrist.keys()).rstrip(':')
         # genel mesaj gönderme
         elif code == "SAY":
-            self.thread_queue.put((self.nickname, argument))
+            for to_nickname in fihrist.keys():
+                fihrist[to_nickname].put((self.nickname, argument))
             response = "SOK"
         # özel mesaj gönderme
         elif code == "MSG":
@@ -77,6 +78,7 @@ class ReadThread(threading.Thread):
         # hatalı kod girildiyse ERR hatası ver
         else:
             response = "ERR"
+        return response
 
 
 class WriteThread(threading.Thread):
