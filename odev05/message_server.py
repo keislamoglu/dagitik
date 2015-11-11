@@ -1,6 +1,7 @@
 import threading
 import queue
 import socket
+import time
 
 s = socket.socket()
 host = socket.gethostname()
@@ -14,6 +15,7 @@ threadLock = threading.Lock()
 
 def main():
     thread_counter = 0
+    LoggerThread('LogThread', log_queue, 'log.txt')
     while True:
         print("Waiting for connection")
         client_socket, client_address = s.accept()
@@ -37,17 +39,21 @@ class ReadThread(threading.Thread):
         self.nickname = ""
 
     def run(self):
+        print("Starting %s" % self.thread_name)  # silinecek
         self.log_queue.put("Starting %s" % self.thread_name)
         while True:
             received_message = self.client_socket.recv(1024).decode()
             result = self.parser(received_message)
             if not result == 0:
+                self.thread_queue.put('end')
                 break
+        print("Ending %s" % self.thread_name)  # silinecek
         self.log_queue.put("Ending %s" % self.thread_name)
 
     def parser(self, data):
         global fihrist, threadLock
         data = data.strip()
+
         # eğer data formatı bozuk ise hata ver
         if len(data) < 3 or " " in data[0:3] or (len(data) > 3 and data[3] != " "):
             self.csend("ERR\n")
@@ -64,6 +70,9 @@ class ReadThread(threading.Thread):
         # nickname tanımlanıyor
         elif code == "USR":
             nickname = argument
+            # eğer nickname zaten alınmışsa ve yenisi alınmak istiyorsa eskisi listeden çıkarılır
+            if not self.nickname == "":
+                fihrist[self.nickname].pop()
             # belirtilen nickname fihrist listesinde yok ise listeye eklenir
             if nickname not in fihrist.keys():
                 self.nickname = nickname
@@ -143,24 +152,61 @@ class WriteThread(threading.Thread):
         self.log_queue = log_queue
 
     def run(self):
-        self.log_queue.put("Starting " + self.thread_name)
+        print("Starting %s" % self.thread_name)  # silinecek
+        self.log_queue.put("Starting %s" % self.thread_name)
         while True:
             if not self.thread_queue.empty():
                 queue_data = self.thread_queue.get()
-                # özel mesaj gönderme
-                if len(queue_data) > 2:
-                    to_nickname, from_nickname, message = queue_data
-                    message_to_send = "MSG %s" % message
-                # genel mesaj gönderme
-                elif len(queue_data) == 2:
-                    from_nickname, message = queue_data
-                    message_to_send = "SAY %s" % message
-                # sistem mesajı gönderme
+                if queue_data == "end":
+                    break
                 else:
-                    message_to_send = "SYS %s" % queue_data
-                self.client_socket.send(bytes(message_to_send, 'UTF-8'))
+                    # özel mesaj gönderme
+                    if len(queue_data) > 2:
+                        to_nickname, from_nickname, message = queue_data
+                        message_to_send = "MSG %s" % message
+                    # genel mesaj gönderme
+                    elif len(queue_data) == 2:
+                        from_nickname, message = queue_data
+                        message_to_send = "SAY %s" % message
+                    # sistem mesajı gönderme
+                    else:
+                        message_to_send = "SYS %s" % queue_data
+                    try:
+                        self.csend(message_to_send)
+                    except socket.error:
+                        self.client_socket.close()
+                        break
+        print("Ending %s" % self.thread_name)  # silinecek
+        self.log_queue.put("Ending %s" % self.thread_name)
 
-        self.log_queue.put("Exiting " + self.thread_name)
+    def csend(self, data):
+        self.client_socket.send(bytes(data, 'UTF-8'))
+
+
+class LoggerThread(threading.Thread):
+    def __init__(self, thread_name, log_queue, log_file_name):
+        threading.Thread.__init__(self)
+        self.thread_name = thread_name
+        self.log_queue = log_queue
+        self.log_file_name = log_file_name
+        self.log_file = open(log_file_name, 'a+')
+
+    def log(self, message):
+        t = time.ctime()
+        self.log_file.write("%s: %s\n" % (t, message))
+        self.log_file.flush()
+
+    def run(self):
+        self.log("Starting %s" % self.thread_name)
+        while True:
+            if not self.log_queue.emty():
+                to_be_logged = self.log_queue.get()
+                if to_be_logged == "end":
+                    break
+                else:
+                    self.log(to_be_logged)
+        self.log("Ending %s" % self.thread_name)
+        self.log_file.close()
 
 
 if __name__ == '__main__':
