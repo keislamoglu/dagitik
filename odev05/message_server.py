@@ -83,11 +83,6 @@ class ReadThread(threading.Thread):
             # belirtilen nickname zaten mevcut ise baglanti reddedilir
             else:
                 response = "REJ " + nickname
-                # client socket'e cevap gonderiliyor
-                self.csend(response)
-                # socket baglantisi kapatiliyor
-                self.client_socket.close()
-                return 1
         # cikis yapilmasi talebi
         elif code == "QUI":
             self.fihrist.pop(self.nickname)
