@@ -1,5 +1,5 @@
 import threading
-import queue
+import Queue
 import socket
 import time
 
@@ -8,28 +8,32 @@ host = socket.gethostname()
 port = 12345
 s.bind((host, port))
 s.listen(5)
-log_queue = queue.Queue()
+log_queue = Queue.Queue()
 fihrist = {}
 threadLock = threading.Lock()
 
 
 def main():
+    global fihrist
     thread_counter = 0
-    LoggerThread('LogThread', log_queue, 'log.txt')
+    logger_thread = LoggerThread('LogThread', log_queue, 'log.txt')
+    logger_thread.start()
     while True:
-        print("Waiting for connection")
+        log_queue.put("Waiting for connection")
         client_socket, client_address = s.accept()
-        print("Got a connection from ", client_address)
+        log_queue.put("Got a connection from %s" % str(client_address))
         thread_counter += 1
-        thread_queue = queue.Queue()
+        thread_queue = Queue.Queue()
         WriteThread('WriteThread_' + str(thread_counter), client_socket, client_address, thread_queue,
                     log_queue).start()
         ReadThread('ReadThread_' + str(thread_counter), client_socket, client_address, thread_queue,
-                   log_queue).start()
+                   log_queue, fihrist).start()
+    log_queue.put("end")
+    logger_thread.join()
 
 
 class ReadThread(threading.Thread):
-    def __init__(self, thread_name, client_socket, client_address, thread_queue, log_queue):
+    def __init__(self, thread_name, client_socket, client_address, thread_queue, log_queue, fihrist):
         threading.Thread.__init__(self)
         self.thread_name = thread_name
         self.client_socket = client_socket
@@ -37,109 +41,105 @@ class ReadThread(threading.Thread):
         self.thread_queue = thread_queue
         self.log_queue = log_queue
         self.nickname = ""
+        self.fihrist = fihrist
 
     def run(self):
-        print("Starting %s" % self.thread_name)  # silinecek
         self.log_queue.put("Starting %s" % self.thread_name)
         while True:
-            received_message = self.client_socket.recv(1024).decode()
+            received_message = self.client_socket.recv(1024)
             result = self.parser(received_message)
             if not result == 0:
                 self.thread_queue.put('end')
                 break
-        print("Ending %s" % self.thread_name)  # silinecek
         self.log_queue.put("Ending %s" % self.thread_name)
 
     def parser(self, data):
-        global fihrist, threadLock
+        global threadLock
         data = data.strip()
 
-        # eğer data formatı bozuk ise hata ver
+        # eger data formati bozuk ise hata ver
         if len(data) < 3 or " " in data[0:3] or (len(data) > 3 and data[3] != " "):
             self.csend("ERR\n")
             return 0
 
-        # kodu oluşturan ilk üç hane
+        # kodu olusturan ilk uc hane
         code = data[0:3]
-        # argüman
+        # arguman
         argument = data[4:]
 
-        # giriş yapılmadıysa ERL hatası ver
+        # giris yapilmadiysa ERL hatasi ver
         if not self.nickname and code != "USR":
             response = "ERL"
-        # nickname tanımlanıyor
-        elif code == "USR":
+        # nickname tanimlaniyor
+        elif self.nickname == "" and code == "USR":
             nickname = argument
-            # eğer nickname zaten alınmışsa ve yenisi alınmak istiyorsa eskisi listeden çıkarılır
-            if not self.nickname == "":
-                fihrist[self.nickname].pop()
             # belirtilen nickname fihrist listesinde yok ise listeye eklenir
-            if nickname not in fihrist.keys():
+            if nickname not in self.fihrist.keys():
                 self.nickname = nickname
                 # yeni nickname fihriste ekleniyor
-                fihrist.update({self.nickname: self.thread_queue})
+                self.fihrist.update({self.nickname: self.thread_queue})
                 response = "HEL " + self.nickname
                 self.log_queue.put(self.nickname + " has joined.")
-            # belirtilen nickname zaten mevcut ise bağlantı reddedilir
+            # belirtilen nickname zaten mevcut ise baglanti reddedilir
             else:
                 response = "REJ " + nickname
-                # client socket'e cevap gönderiliyor
+                # client socket'e cevap gonderiliyor
                 self.csend(response)
-                # socket bağlantısı kapatılıyor
+                # socket baglantisi kapatiliyor
                 self.client_socket.close()
                 return 1
-        # çıkış yapılması talebi
+        # cikis yapilmasi talebi
         elif code == "QUI":
-            fihrist.pop(self.nickname)
+            self.fihrist.pop(self.nickname)
             response = "BYE " + self.nickname
             self.csend(response)
             self.client_socket.close()
             self.log_queue.put(self.nickname + " has left.")
             return 1
-        # tic-toc bağlantı testi
+        # tic-toc baglanti testi
         elif code == "TIC":
             response = "TOC"
-        # kullanıcıları listeleme
+        # kullanicilari listeleme
         elif code == "LSQ":
-            response = "LSA " + "".join('%s:' % k for k in fihrist.keys()).rstrip(':')
-        # genel mesaj gönderme
+            response = "LSA " + "".join('%s:' % k for k in self.fihrist.keys()).rstrip(':')
+        # genel mesaj gonderme
         elif code == "SAY":
             # thread lock devreye sokuluyor
             threadLock.acquire()
-            for to_nickname in fihrist.keys():
+            for to_nickname in self.fihrist.keys():
                 fihrist[to_nickname].put((self.nickname, argument))
-            # thread lock devre dışı bırakılıyor
+            # thread lock devre disi birakiliyor
             threadLock.release()
             response = "SOK"
-        # özel mesaj gönderme
-        elif code == "MSG":
+        # ozel mesaj gonderme
+        elif code == "MSG" and ':' in argument:
             to_nickname, message = argument.split(':')
-            if to_nickname not in fihrist.keys():
+            if to_nickname not in self.fihrist.keys():
                 response = "MNO " + to_nickname
             else:
                 # thread lock devreye sokuluyor
                 threadLock.acquire()
                 fihrist[to_nickname].put((to_nickname, self.nickname, message))
-                # thread lock devre dışı bırakılıyor
+                # thread lock devre disi birakiliyor
                 threadLock.release()
                 response = "MOK"
-        # sistem mesajı gönderme
+        # sistem mesaji gonderme
         elif code == "SYS":
             threadLock.acquire()
             self.thread_queue.put(argument)
             threadLock.release()
             response = "YOK"
-        # hatalı kod girildiyse ERR hatası ver
+        # hatali kod girildiyse ERR hatasi ver
         else:
             response = "ERR"
 
-        # client socket'ine cevap gönderiliyor
+        # client socket'ine cevap gonderiliyor
         self.csend(response + "\n")
-        # hatasız bir şekilde sonlandı
+        # hatasiz bir sekilde sonlandi
         return 0
 
     def csend(self, data):
-        self.client_socket.send(bytes(data, 'UTF-8'))
+        self.client_socket.send(data)
 
 
 class WriteThread(threading.Thread):
@@ -152,7 +152,6 @@ class WriteThread(threading.Thread):
         self.log_queue = log_queue
 
     def run(self):
-        print("Starting %s" % self.thread_name)  # silinecek
         self.log_queue.put("Starting %s" % self.thread_name)
         while True:
             if not self.thread_queue.empty():
@@ -160,15 +159,15 @@ class WriteThread(threading.Thread):
                 if queue_data == "end":
                     break
                 else:
-                    # özel mesaj gönderme
+                    # ozel mesaj gonderme
                     if len(queue_data) > 2:
                         to_nickname, from_nickname, message = queue_data
                         message_to_send = "MSG %s" % message
-                    # genel mesaj gönderme
+                    # genel mesaj gonderme
                     elif len(queue_data) == 2:
                         from_nickname, message = queue_data
                         message_to_send = "SAY %s" % message
-                    # sistem mesajı gönderme
+                    # sistem mesaji gonderme
                     else:
                         message_to_send = "SYS %s" % queue_data
                     try:
@@ -176,11 +175,10 @@ class WriteThread(threading.Thread):
                     except socket.error:
                         self.client_socket.close()
                         break
-        print("Ending %s" % self.thread_name)  # silinecek
         self.log_queue.put("Ending %s" % self.thread_name)
 
     def csend(self, data):
-        self.client_socket.send(bytes(data, 'UTF-8'))
+        self.client_socket.send(data)
 
 
 class LoggerThread(threading.Thread):
@@ -192,14 +190,18 @@ class LoggerThread(threading.Thread):
         self.log_file = open(log_file_name, 'a+')
 
     def log(self, message):
+        # thread lock devreye sokuluyor
+        threadLock.acquire()
         t = time.ctime()
         self.log_file.write("%s: %s\n" % (t, message))
         self.log_file.flush()
+        # thread lock devre disi birakiliyor
+        threadLock.release()
 
     def run(self):
         self.log("Starting %s" % self.thread_name)
         while True:
-            if not self.log_queue.emty():
+            if not self.log_queue.empty():
                 to_be_logged = self.log_queue.get()
                 if to_be_logged == "end":
                     break
