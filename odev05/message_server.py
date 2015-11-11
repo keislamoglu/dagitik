@@ -108,7 +108,7 @@ class ReadThread(threading.Thread):
             response = "SOK"
         # ozel mesaj gonderme
         elif code == "MSG" and ':' in argument:
-            to_nickname, message = argument.split(':')
+            to_nickname, message = argument.split(':', 1)
             if to_nickname not in self.fihrist.keys():
                 response = "MNO " + to_nickname
             else:
