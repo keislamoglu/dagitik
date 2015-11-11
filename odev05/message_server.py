@@ -40,10 +40,8 @@ class ReadThread(threading.Thread):
         self.log_queue.put("Starting %s" % self.thread_name)
         while True:
             received_message = self.client_socket.recv(1024).decode()
-            self.client_socket.send(bytes(self.parser(received_message), 'UTF-8'))
-            # client'tan QUI kodu alındığında soketi kapat
-            if received_message == "QUI":
-                self.client_socket.close()
+            result = self.parser(received_message)
+            if not result == 0:
                 break
         self.log_queue.put("Ending %s" % self.thread_name)
 
@@ -52,7 +50,8 @@ class ReadThread(threading.Thread):
         data = data.strip()
         # eğer data formatı bozuk ise hata ver
         if len(data) < 3 or " " in data[0:3] or (len(data) > 3 and data[3] != " "):
-            return "ERR\n"
+            self.csend("ERR\n")
+            return 0
 
         # kodu oluşturan ilk üç hane
         code = data[0:3]
@@ -64,17 +63,30 @@ class ReadThread(threading.Thread):
             response = "ERL"
         # nickname tanımlanıyor
         elif code == "USR":
-            #
-            if argument not in fihrist.keys():
-                self.nickname = argument
+            nickname = argument
+            # belirtilen nickname fihrist listesinde yok ise listeye eklenir
+            if nickname not in fihrist.keys():
+                self.nickname = nickname
+                # yeni nickname fihriste ekleniyor
                 fihrist.update({self.nickname: self.thread_queue})
-                response = "HEL" + self.nickname
+                response = "HEL " + self.nickname
+                self.log_queue.put(self.nickname + " has joined.")
+            # belirtilen nickname zaten mevcut ise bağlantı reddedilir
             else:
-                response = "REJ" + argument
+                response = "REJ " + nickname
+                # client socket'e cevap gönderiliyor
+                self.csend(response)
+                # socket bağlantısı kapatılıyor
+                self.client_socket.close()
+                return 1
         # çıkış yapılması talebi
         elif code == "QUI":
             fihrist.pop(self.nickname)
-            response = "BYE" + self.nickname
+            response = "BYE " + self.nickname
+            self.csend(response)
+            self.client_socket.close()
+            self.log_queue.put(self.nickname + " has left.")
+            return 1
         # tic-toc bağlantı testi
         elif code == "TIC":
             response = "TOC"
@@ -111,7 +123,14 @@ class ReadThread(threading.Thread):
         # hatalı kod girildiyse ERR hatası ver
         else:
             response = "ERR"
-        return response + "\n"
+
+        # client socket'ine cevap gönderiliyor
+        self.csend(response + "\n")
+        # hatasız bir şekilde sonlandı
+        return 0
+
+    def csend(self, data):
+        self.client_socket.send(bytes(data, 'UTF-8'))
 
 
 class WriteThread(threading.Thread):
@@ -139,6 +158,10 @@ class WriteThread(threading.Thread):
                 # sistem mesajı gönderme
                 else:
                     message_to_send = "SYS %s" % queue_data
-                self.client_socket.send(bytes(message_to_send), 'UTF-8')
+                self.client_socket.send(bytes(message_to_send, 'UTF-8'))
 
         self.log_queue.put("Exiting " + self.thread_name)
+
+
+if __name__ == '__main__':
+    main()
