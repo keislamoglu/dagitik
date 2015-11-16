@@ -159,11 +159,11 @@ class WriteThread(threading.Thread):
                     # ozel mesaj gonderme
                     if len(queue_data) > 2:
                         to_nickname, from_nickname, message = queue_data
-                        message_to_send = "MSG %s" % message
+                        message_to_send = "MSG %s:%s" % (from_nickname, message)
                     # genel mesaj gonderme
                     elif len(queue_data) == 2:
                         from_nickname, message = queue_data
-                        message_to_send = "SAY %s" % message
+                        message_to_send = "SAY %s:%s" % (from_nickname, message)
                     # sistem mesaji gonderme
                     else:
                         message_to_send = "SYS %s" % queue_data
