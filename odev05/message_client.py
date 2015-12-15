@@ -10,7 +10,6 @@ from PyQt4.QtGui import *
 def main():
     client_socket = socket.socket()
     host = socket.gethostname()
-    # host = "178.233.19.205"
     port = 12345
     client_socket.connect((host, port))
     thread_queue = Queue.Queue()
@@ -19,6 +18,10 @@ def main():
     w_thread.start()
     r_thread = ReadThread('ClientReadThread', client_socket, app)
     r_thread.start()
+    app.run()
+    r_thread.join()
+    w_thread.join()
+    client_socket.close()
 
 
 class ReadThread(threading.Thread):
@@ -38,13 +41,26 @@ class ReadThread(threading.Thread):
         elif code == "SAY":
             from_nickname, message = argument.split(':', 1)
             # genel mesajlar icin <from_nickname> formati kullanilacak
-            self.app.cprint("<%s>: %s", (from_nickname, message))
+            self.app.cprint("<%s>: %s" % (from_nickname, message))
+        elif code == "LSA":
+            self.app.cprint("-Server-: Online users => %s" % str(argument).replace(':', ', '))
         elif code == "BYE":
+            self.app.close()
             self.client_socket.close()
             return 1
-        return 0
+        elif code == "ERL":
+            self.app.cprint("-Server-: Nick not registered")
+        elif code == "HEL":
+            self.app.cprint("-Server-: Registered as <%s>" % argument)
+        elif code == "REJ":
+            self.app.cprint("-Server-: <%s> already registered" % argument)
+        elif code == "ERR":
+            self.app.cprint("-Server-: Error")
+        elif code == "MNO":
+            self.app.cprint("-Server-: User <%s> not found" % argument)
 
     def run(self):
+        print("Read Thread has started")
         while True:
             try:
                 received_message = self.client_socket.recv(1024)
@@ -56,6 +72,7 @@ class ReadThread(threading.Thread):
             except socket.error:
                 self.client_socket.close()
                 break
+        print("Read Thread has ended")
 
 
 class WriteThread(threading.Thread):
@@ -66,6 +83,7 @@ class WriteThread(threading.Thread):
         self.thread_queue = thread_queue
 
     def run(self):
+        print("Write Thread has started")
         while True:
             if not self.thread_queue.empty():
                 to_send_message = self.thread_queue.get()
@@ -76,6 +94,7 @@ class WriteThread(threading.Thread):
                 except socket.error:
                     self.client_socket.close()
                     break
+        print("Write Thread has ended")
 
 
 class ClientDialog(QDialog):
@@ -108,25 +127,26 @@ class ClientDialog(QDialog):
 
     def outgoing_parser(self):
         data = self.sender.text()
+        self.cprint("-Local-: %s" % data)
         if len(data) == 0:
             return
         to_send_message = ''
         if data[0] == '/':
             if ' ' in data:
-                code, argument = data[1:].split(' ', 1)
+                code, argument = str(data[1:]).split(' ', 1)
             else:
                 code = data[1:]
             if code == "list":
-                to_send_message = "LSA"
+                to_send_message = "LSQ"
             elif code == "quit":
                 to_send_message = "QUI"
             elif code == "msg":
-                to_nickname, message = argument.split(' ', 1)
+                to_nickname, message = argument.split(' ')
                 to_send_message = "MSG %s:%s" % (to_nickname, message)
             elif code == "nick":
                 to_send_message = "USR %s" % (argument)
             else:
-                self.app.cprint("Local: Command Error.")
+                self.cprint("Local: Command Error.")
         else:
             to_send_message = "SAY %s" % data
         if not to_send_message == '':
@@ -139,3 +159,7 @@ class ClientDialog(QDialog):
     def run(self):
         self.show()
         self.qt_app.exec_()
+
+
+if __name__ == '__main__':
+    main()
