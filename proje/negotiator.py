@@ -71,10 +71,15 @@ class ServerSideListenerThread(threading.Thread):
             # komut formati dogru degilse komut hatali mesaji gonder
             if not len(cmd) == 5:
                 to_queue = 'CMDER'
-            # Kayit yapilmadiysa kayit talebi disindaki komutlar icin "REGER" hatasi verir
-            elif cmd != 'REGME' and (
-                not self.__connect_point or get_node_status(self.__connect_point) != STATE_SUCCESS):
+            # Kayit yapilmadiysa kayit talebi ve HELLO mesaji disindaki komutlar icin "REGER" hatasi verir
+            elif cmd != 'REGME' and cmd != 'HELLO' and (
+                        not self.__connect_point or get_node_status(self.__connect_point) != STATE_SUCCESS):
                 to_queue = 'REGER'
+            elif cmd == 'HELLO':
+                to_queue = 'SALUT %s' % TYPE_NEGOTIATOR
+            elif cmd == 'CLOSE':
+                self.connect_point_list.pop(self.__connect_point)
+                to_queue = 'BUBYE'
             # Kayit talebi
             elif cmd == 'REGME':
                 self.__connect_point = str(argument).split(':', 1)
