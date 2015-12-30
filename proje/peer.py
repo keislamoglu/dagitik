@@ -43,14 +43,17 @@ class Server(threading.Thread):
 
     def run(self):
         threads = []
+        i = 0
         while True:
+            i += 1
             client_socket, client_address = self.socket.accept()
             server_queue = Queue.Queue()
             checking_queue = Queue.Queue()
-            server_listener = ServerSideListenerThread(checking_queue, server_queue, client_socket, client_address,
+            server_listener = ServerSideListenerThread("server_listener_%d" % i, checking_queue, server_queue,
+                                                       client_socket, client_address,
                                                        connectPointList)
-            server_sender = ServerSideSenderThread(server_queue, client_socket, client_address)
-            checker = CheckerThread(checking_queue, socket, connectPointList)
+            server_sender = ServerSideSenderThread("server_sender_%d" % i, server_queue, client_socket, client_address)
+            checker = CheckerThread("checker_%d" % i, checking_queue, socket, connectPointList)
             threads.append(server_listener)
             threads.append(server_sender)
             threads.append(checker)
@@ -60,14 +63,14 @@ class Server(threading.Thread):
 
 
 class ServerSideListenerThread(threading.Thread):
-    def __init__(self, name, client_queue, server_queue, client_socket, client_address, connect_point_list):
+    def __init__(self, name, checking_queue, server_queue, client_socket, client_address, connect_point_list):
         threading.Thread.__init__(self)
         self.name = name
         self.csocket = client_socket
         self.caddress = client_address
         self.server_queue = server_queue
         self.connect_point_list = connect_point_list
-        self.client_queue = client_queue
+        self.checking_queue = checking_queue
         self.__connect_point = False
 
     def run(self):
@@ -134,7 +137,7 @@ class ServerSideListenerThread(threading.Thread):
         self.server_queue.put(data)
 
     def reverse_checking(self):
-        self.client_queue.put("CHECK %s:%s" % self.__connect_point)
+        self.checking_queue.put("CHECK %s:%s" % self.__connect_point)
 
 
 class ServerSideSenderThread(threading.Thread):
