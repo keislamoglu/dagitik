@@ -1,5 +1,3 @@
-__author__ = 'keislamoglu'
-
 import threading
 import Queue
 import socket
@@ -18,29 +16,40 @@ QUEUENUM = 20
 CONNECTION_LOST = 'CONN_LOST'
 CONNECTION_CLOSED = 'CONN_CLOSED'
 
-threadLock = threading.Lock()
-
 s = socket.socket()
 ip = socket.gethostname()
-port = 34762
+port = 5050
 s.bind((ip, port))
 s.listen(5)
 connectPointList = {}
 
 
 def main():
+    threads = []
     while True:
         print("Waiting for connetion")
         client_socket, client_address = s.accept()
+        s.connect(client_address)
+
         checking_queue = Queue.Queue()
         thread_queue = Queue.Queue()
-        # Client Side Thread
-        ClientSideThread(checking_queue, s, connectPointList)
-        # Server Side Listener Thread
-        ServerSideListenerThread(client_socket, client_address, thread_queue, checking_queue, connectPointList)
-        # Server Side Sender Thread
-        ServerSideSenderThread(client_socket, client_address, thread_queue, checking_queue, connectPointList)
-        s.connect(client_address)
+
+        client_thread = ClientSideThread(checking_queue, s, connectPointList)
+        server_l_thread = ServerSideListenerThread(client_socket, client_address, thread_queue, checking_queue,
+                                                   connectPointList)
+        server_s_thread = ServerSideSenderThread(client_socket, client_address, thread_queue, checking_queue,
+                                                 connectPointList)
+
+        threads.append(client_thread)
+        threads.append(server_l_thread)
+        threads.append(server_s_thread)
+
+        client_thread.start()
+        server_s_thread.start()
+        server_l_thread.start()
+
+        for thread in threads:
+            thread.join()
 
 
 # Server Side Listener Thread
@@ -85,11 +94,17 @@ class ServerSideListenerThread(threading.Thread):
                 self.__connect_point = str(argument).split(':', 1)
                 # ip ve port numaralari formatlari dogrulandiysa devam eder
                 if is_valid_ip_port(self.__connect_point):
-                    t = time.ctime()
-                    # (<ip>, <port>): (<state>, <time>, <type>) olarak node_list'e kaydediliyor
-                    self.connect_point_list.update({self.__connect_point: (STATE_WAITING,)})
-                    to_queue = 'REGWA'
-                    self.reverse_checking()
+                    if not node_exists(self.__connect_point) or not get_node_status(
+                            self.__connect_point) == STATE_SUCCESS:
+                        # (<ip>, <port>): (<state>, <time>, <type>) olarak node_list'e kaydediliyor
+                        self.connect_point_list.update({self.__connect_point: (STATE_WAITING,)})
+                        to_queue = 'REGWA'
+                        self.reverse_checking()
+                    else:
+                        t = time.time()
+                        self.connect_point_list.update({self.__connect_point: (
+                            get_node_status(self.__connect_point), t, get_node_type(self.__connect_point))})
+                        to_queue = 'REGOK %s' % t
                 else:
                     to_queue = CONNECTION_CLOSED
             elif cmd == 'GETNL':
@@ -218,5 +233,26 @@ def get_node_status(connect_point):
     return connectPointList[connect_point][0]
 
 
+#
+# connect_point parametresi ile node un time degeri sorgulanir
+#
+def get_node_time(connect_point):
+    return connectPointList[connect_point][1]
+
+
+#
+# connect_point parametresi ile node un type degeri sorgulanir
+#
+def get_node_type(connect_point):
+    return connectPointList[connect_point][2]
+
+
+#
+# connect_point parametresi ile node un var olup olmadigi sorgulanir
+#
 def node_exists(connect_point):
     return connectPointList.has_key(connect_point)
+
+
+if __name__ == '__main__':
+    main()
