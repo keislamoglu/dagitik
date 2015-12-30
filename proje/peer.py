@@ -9,6 +9,7 @@ import time
 import math
 import socket
 import re
+import json
 
 # Sabitler
 TYPE_NEGOTIATOR = 'N'
@@ -22,6 +23,11 @@ QUEUENUM = 20
 CONNECTION_LOST = 'CONN_LOST'
 CONNECTION_CLOSED = 'CONN_CLOSED'
 
+# Mevcut fonksiyonlarin listesi
+funlist = {
+    'GrayScale': (0, 255),
+    'SobelFilter': (0, 255)
+}
 s = socket.socket()
 ip = socket.gethostname()
 port = 9090
@@ -40,26 +46,29 @@ class Server(threading.Thread):
         while True:
             client_socket, client_address = self.socket.accept()
             server_queue = Queue.Queue()
-            client_queue = Queue.Queue()
-            server_listener = ServerSideListenerThread(client_queue, server_queue, client_socket, client_address,
+            checking_queue = Queue.Queue()
+            server_listener = ServerSideListenerThread(checking_queue, server_queue, client_socket, client_address,
                                                        connectPointList)
             server_sender = ServerSideSenderThread(server_queue, client_socket, client_address)
+            checker = CheckerThread(checking_queue, socket, connectPointList)
             threads.append(server_listener)
             threads.append(server_sender)
+            threads.append(checker)
 
         for t in threads:
             t.join()
 
 
 class ServerSideListenerThread(threading.Thread):
-    def __init__(self, client_queue, server_queue, client_socket, client_address, connect_point_list):
+    def __init__(self, name, client_queue, server_queue, client_socket, client_address, connect_point_list):
         threading.Thread.__init__(self)
+        self.name = name
         self.csocket = client_socket
         self.caddress = client_address
         self.server_queue = server_queue
         self.connect_point_list = connect_point_list
-        self.__connect_point = False
         self.client_queue = client_queue
+        self.__connect_point = False
 
     def run(self):
         while True:
@@ -107,6 +116,11 @@ class ServerSideListenerThread(threading.Thread):
                     to_queue = prepare_node_list(argument)
                 else:
                     to_queue = prepare_node_list()
+            elif cmd == 'FUNRQ':
+                if funlist.has_key(argument):
+                    to_queue = 'FUNYS %s:%s' % (argument, json.dumps(funlist[argument]))
+                else:
+                    to_queue = 'FUNNO %s' % argument
             else:
                 to_queue = 'CMDER'
 
@@ -124,8 +138,9 @@ class ServerSideListenerThread(threading.Thread):
 
 
 class ServerSideSenderThread(threading.Thread):
-    def __init__(self, server_queue, client_socket, client_address):
+    def __init__(self, name, server_queue, client_socket, client_address):
         threading.Thread.__init__(self)
+        self.name = name
         self.server_queue = server_queue
         self.csocket = client_socket
         self.caddress = client_address
@@ -154,35 +169,73 @@ class ServerSideSenderThread(threading.Thread):
             return False
 
 
-class ClientSideSenderThread(threading.Thread):
-    def __init__(self, client_queue, connect_point_list, socket):
+# Checker Thread
+class CheckerThread(threading.Thread):
+    def __init__(self, name, checking_queue, own_socket, connect_point_list):
         threading.Thread.__init__(self)
-        self.client_queue = client_queue
+        self.name = name
+        self.checking_queue = checking_queue
+        self.own_socket = own_socket
         self.connect_point_list = connect_point_list
-        self.__connect_point = False
-        self.socket = socket
 
     def run(self):
         while True:
-            if not self.client_queue.empty():
-                queue_message = self.client_queue.get()
+            if not self.checking_queue.empty():
+                queue_message = self.checking_queue.get()
                 if queue_message[0:5] == 'CHECK':
                     connect_point = str(queue_message[6:]).split(':')
-                    self.socket.connect(connect_point)
-                    self.socket.send("HELLO")
-                    response = self.socket.recv(1024)
-                    # SALUT cevabi ve type gonderildiginde connect_point_list'te guncellenir
-                    if response[0:5] == 'SALUT' and is_valid_type(response[6:1]):
-                        self.connect_point_list.update({connect_point: (STATE_SUCCESS, time.time(), response[6:1])})
+                    try:
+                        self.own_socket.connect(connect_point)
+                        self.own_socket.send('HELLO')
+                        response = self.own_socket.recv(1024)
+                        # SALUT cevabi ve type gonderildiginde connect_point_list'te guncellenir
+                        if response[0:5] == 'SALUT' and is_valid_type(response[6:1]):
+                            self.connect_point_list.update({connect_point: (STATE_SUCCESS, time.time(), response[6:1])})
+                    except socket.error:
+                        self.connect_point_list.pop(connect_point)
 
 
 class ClientSideListenerThread(threading.Thread):
     def __init__(self, client_queue, server_socket, server_address, connect_point_list):
         threading.Thread.__init__(self)
         self.client_queue = client_queue
-        self.server_socket = server_socket
-        self.server_address = server_address
+        self.ssocket = server_socket
+        self.saddress = server_address
         self.connect_point_list = connect_point_list
+
+    def run(self):
+        while True:
+            received_msg = self.ssocket.recv(1024)
+            if received_msg == '':
+                self.put_queue(CONNECTION_LOST)
+                break
+
+    def put_queue(self, data):
+        self.client_queue.put(data)
+
+
+class ClientSideSenderThread(threading.Thread):
+    def __init__(self, client_queue, server_socket, server_address, connect_point_list):
+        threading.Thread.__init__(self)
+        self.client_queue = client_queue
+        self.connect_point_list = connect_point_list
+        self.__connect_point = False
+        self.ssocket = server_socket
+        self.saddress = server_address
+
+    def run(self):
+        while True:
+            if not self.client_queue.empty():
+                queue_message = self.client_queue.get()
+                if queue_message == CONNECTION_LOST or queue_message == CONNECTION_CLOSED:
+                    break
+
+    def ssend(self, data):
+        try:
+            self.ssocket.send(data)
+            return True
+        except socket.error:
+            return False
 
 
 def rgb2gray(rgbint):

@@ -175,12 +175,15 @@ class ClientSideThread(threading.Thread):
                 queue_message = self.queue.get()
                 if queue_message[0:5] == 'CHECK':
                     connect_point = str(queue_message[6:]).split(':')
-                    self.own_socket.connect(connect_point)
-                    self.own_socket.send("HELLO")
-                    response = self.own_socket.recv(1024)
-                    # SALUT cevabi ve type gonderildiginde connect_point_list'te guncellenir
-                    if response[0:5] == 'SALUT' and is_valid_type(response[6:1]):
-                        self.connect_point_list.update({connect_point: (STATE_SUCCESS, time.time(), response[6:1])})
+                    try:
+                        self.own_socket.connect(connect_point)
+                        self.own_socket.send('HELLO')
+                        response = self.own_socket.recv(1024)
+                        # SALUT cevabi ve type gonderildiginde connect_point_list'te guncellenir
+                        if response[0:5] == 'SALUT' and is_valid_type(response[6:1]):
+                            self.connect_point_list.update({connect_point: (STATE_SUCCESS, time.time(), response[6:1])})
+                    except socket.error:
+                        self.connect_point_list.pop(connect_point)
 
 
 # --------------------
